@@ -7,6 +7,8 @@ import os
 import json
 from PySide import QtCore, QtGui, QtOpenGL
 global_application = QtGui.QApplication(sys.argv)
+global_application.setStyle("cleanlooks")
+
 from PySide.QtCore import Qt
 from OpenGL import GL
 from chowdren.build import build
@@ -164,39 +166,115 @@ class Scene(QtGui.QGraphicsScene):
 
 ITEM_HEIGHT = 40
 
+def make_widget(layout):
+    widget = QtGui.QWidget()
+    widget.setLayout(layout)
+    return widget
+
+def make_horizontal_layout(*widgets):
+    layout = QtGui.QHBoxLayout()
+    # layout.setAlignment(Qt.AlignTop)
+    for item in widgets:
+        layout.addWidget(item, alignment = Qt.AlignTop)
+    return layout
+
+class ConditionDialog(QtGui.QDialog):
+    def __init__(self):
+        super(ConditionDialog, self).__init__()
+
+class EventFrame(QtGui.QFrame):
+    def __init__(self):
+        super(EventFrame, self).__init__()
+
+    def dragEnterEvent(self, event):
+        pass
+
+    def dragMoveEvent(self, event):
+        pass
+
+    def dropEvent(self, event):
+        pass
+
+    def mousePressEvent(self, event):
+        pass
+
+class EventGroup(object):
+    def __init__(self, main, data):
+        self.main = main
+        self.data = data
+
+        layout = self.layout = QtGui.QHBoxLayout()
+
+        self.conditions = QtGui.QVBoxLayout()
+        self.actions = QtGui.QVBoxLayout()
+
+        self.conditions.addWidget(QtGui.QPushButton('Add condition'))
+        self.actions.addWidget(QtGui.QPushButton('Add action'))
+
+        tab_label = QtGui.QLabel('1')
+        tab_label.setSizePolicy(QtGui.QSizePolicy.Fixed, 
+                                QtGui.QSizePolicy.Fixed)
+
+        layout.addWidget(tab_label)
+        layout.addLayout(self.conditions)
+        layout.addLayout(self.actions)
+        margin = 2
+        layout.setContentsMargins(margin, margin, margin, margin)
+
+        self.widget = EventFrame()
+        self.widget.setFrameStyle(QtGui.QFrame.StyledPanel | QtGui.QFrame.Plain)
+        self.widget.setLayout(layout)
+
+    def get_widget(self):
+        return self.widget
+
+def make_framed_label(text):
+    label = QtGui.QLabel(text)
+    label.setFrameStyle(QtGui.QFrame.StyledPanel | QtGui.QFrame.Plain)
+    label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+    return label
+
 class EventEditor(QtGui.QWidget):
     def __init__(self, main, data):
         super(EventEditor, self).__init__()
-        size_policy = QtGui.QSizePolicy(
-            QtGui.QSizePolicy.Minimum,
-            QtGui.QSizePolicy.Minimum)
-        # self.setSizePolicy(size_policy)
         self.main = main
         self.data = data
-        self.grid_layout = QtGui.QGridLayout()
-        # self.grid_layout.setSizePolicy(size_policy  )
-        self.grid_layout.setSpacing(1)
-        self.grid_layout.setOriginCorner(Qt.TopLeftCorner)
-        self.grid_layout.setColumnMinimumWidth(0, 200)
-        # self.grid_layout.setColumnStretch(0, 0.0)
 
-        condition_label = QtGui.QLabel('Conditions')
-        action_label = QtGui.QLabel('Actions')
-        for label in (condition_label, action_label):
-            label.setFrameStyle(QtGui.QFrame.Panel | QtGui.QFrame.Sunken)
-            label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        self.add_widget(condition_label, 0, 0)
-        self.add_widget(action_label, 1, 0)
-        add_event = QtGui.QPushButton('Add event')
-        self.add_widget(add_event, 0, 1)
+        self.groups = []
 
-        self.setLayout(self.grid_layout)
+        self.vertical_layout = QtGui.QVBoxLayout()
+        margin = 2
+        self.vertical_layout.setContentsMargins(margin, margin, margin, margin)
+        self.vertical_layout.setAlignment(Qt.AlignTop)
 
-    def add_widget(self, widget, x, y):
-        # self.grid_layout.setFixedSize()
-        self.grid_layout.addWidget(widget, y, x, 
-            alignment = Qt.AlignTop)
-        self.grid_layout.setRowStretch(y, 0.0)
+        self.add_button = QtGui.QPushButton('Add event')
+        self.add_button.clicked.connect(self.on_add_event)
+        self.add_widgets([self.add_button])
+        self.vertical_layout.insertSpacerItem(-1, QtGui.QSpacerItem(0, 0, 
+            vData = QtGui.QSizePolicy.MinimumExpanding))
+        self.setLayout(self.vertical_layout)
+
+    def on_add_event(self):
+        self.add_event()
+
+    def add_event(self):
+        group = EventGroup(self.main, self.data)
+        self.groups.append(group)
+        self.add_widget(group.get_widget(), self.vertical_layout.count() - 2)
+
+    def add_layout(self, layout, index = None):
+        if index is None:
+            index = self.vertical_layout.count()
+        self.vertical_layout.insertLayout(index, layout)
+
+    def add_widget(self, widget, index = None):
+        if index is None:
+            index = self.vertical_layout.count()
+        self.vertical_layout.insertWidget(index, widget)
+
+    def add_widgets(self, widgets, index = None):
+        layout = make_horizontal_layout(*widgets)
+        self.add_layout(layout, index)
 
 class MainWindow(QtGui.QMainWindow):
     build_timer = build_generator = None
@@ -223,6 +301,9 @@ class MainWindow(QtGui.QMainWindow):
         self.graphics_view = QtGui.QGraphicsView(self.graphics_scene)
         self.graphics_view.setDragMode(QtGui.QGraphicsView.RubberBandDrag)
         self.event_editor = EventEditor(self, scene_data)
+        self.event_area = QtGui.QScrollArea()
+        self.event_area.setWidget(self.event_editor)
+        self.event_area.setWidgetResizable(True)
 
         # self.gl_widget = QtOpenGL.QGLWidget(
         #     QtOpenGL.QGLFormat(QtOpenGL.QGL.SampleBuffers))
@@ -230,7 +311,7 @@ class MainWindow(QtGui.QMainWindow):
         # self.graphics_view.setViewportUpdateMode(
         #     QtGui.QGraphicsView.FullViewportUpdate)
 
-        self.setCentralWidget(self.event_editor)
+        self.setCentralWidget(self.event_area)
 
         status_bar = self.statusBar()
         self.status_label = QtGui.QLabel()
